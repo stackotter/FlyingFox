@@ -145,13 +145,13 @@ extension Socket {
         }
     }
 
-    static func makeAddressINET(fromIP4 ip: String, port: UInt16) throws -> sockaddr_in {
+    public static func makeAddressINET(fromIP4 ip: String, port: UInt16) throws -> sockaddr_in {
         var address = Socket.makeAddressINET(port: port)
         address.sin_addr = try Socket.makeInAddr(fromIP4: ip)
         return address
     }
 
-    static func makeInAddr(fromIP4 address: String) throws -> in_addr {
+    public static func makeInAddr(fromIP4 address: String) throws -> in_addr {
         var addr = in_addr()
         guard address.withCString({ Socket.inet_pton(AF_INET, $0, &addr) }) == 1 else {
             throw SocketError.makeFailed("inet_pton AF_INET")
@@ -159,7 +159,7 @@ extension Socket {
         return addr
     }
 
-    static func makeInAddr(fromIP6 address: String) throws -> in6_addr {
+    public static func makeInAddr(fromIP6 address: String) throws -> in6_addr {
         var addr = in6_addr()
         guard address.withCString({ Socket.inet_pton(AF_INET6, $0, &addr) }) == 1 else {
             throw SocketError.makeFailed("inet_pton AF_INET6")
@@ -167,7 +167,7 @@ extension Socket {
         return addr
     }
 
-    static func unlink(_ address: sockaddr_un) throws {
+    public static func unlink(_ address: sockaddr_un) throws {
         var address = address
         guard Socket.unlink(&address.sun_path.0) == 0 else {
             throw SocketError.makeFailed("unlink")
