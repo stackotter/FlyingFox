@@ -91,7 +91,7 @@ public struct Socket: Sendable, Hashable {
     private func setValueImpl<O: SettableSocketOption>(_ value: O.Value, for option: O) throws {
         var value = option.makeSocketValue(from: value)
         let length = socklen_t(MemoryLayout<O.SocketValue>.size)
-        guard Socket.setsockopt(file.rawValue, SOL_SOCKET, option.name, &value, length) >= 0 else {
+        guard Socket.setsockopt(file.rawValue, option.getLevel(), option.name, &value, length) >= 0 else {
             throw SocketError.makeFailed("SetOption")
         }
     }
@@ -109,7 +109,7 @@ public struct Socket: Sendable, Hashable {
     public func getValueImpl<O: GettableSocketOption>(for option: O) throws -> O.Value {
         let valuePtr = UnsafeMutablePointer<O.SocketValue>.allocate(capacity: 1)
         var length = socklen_t(MemoryLayout<O.SocketValue>.size)
-        guard Socket.getsockopt(file.rawValue, SOL_SOCKET, option.name, valuePtr, &length) >= 0 else {
+        guard Socket.getsockopt(file.rawValue, option.getLevel(), option.name, valuePtr, &length) >= 0 else {
             throw SocketError.makeFailed("GetOption")
         }
         return option.makeValue(from: valuePtr.pointee)
@@ -215,6 +215,29 @@ public struct Socket: Sendable, Hashable {
         }
     }
 
+    public func recvFrom(atMost length: Int) throws -> ([UInt8], sockaddr_storage) {
+        var sender = sockaddr_storage()
+        var sockaddrLength = UInt32(MemoryLayout<sockaddr_storage>.stride)
+        let bytes = try [UInt8](unsafeUninitializedCapacity: length) { buffer, count in
+            withUnsafeMutablePointer(to: &sender) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { pointer in
+                    count = recvfrom(file.rawValue, buffer.baseAddress, length, 0, pointer, &sockaddrLength)
+                }
+            }
+
+            guard count > 0 else {
+                if errno == EWOULDBLOCK {
+                    throw SocketError.blocked
+                } else if errno == EBADF || count == 0 {
+                    throw SocketError.disconnected
+                } else {
+                    throw SocketError.makeFailed("Read")
+                }
+            }
+        }
+        return (bytes, sender)
+    }
+
     public func read() throws -> UInt8 {
         var byte: UInt8 = 0
         _ = try withUnsafeMutablePointer(to: &byte) { buffer in
@@ -317,6 +340,7 @@ public protocol SettableSocketOption {
     associatedtype SocketValue
 
     var name: Int32 { get }
+    func getLevel() -> Int32
     func makeSocketValue(from value: Value) -> SocketValue
 }
 
@@ -325,6 +349,7 @@ public protocol GettableSocketOption {
     associatedtype SocketValue
 
     var name: Int32 { get }
+    func getLevel() -> Int32
     func makeValue(from socketValue: SocketValue) -> Value
 }
 
@@ -333,8 +358,27 @@ public protocol SocketOption: SettableSocketOption, GettableSocketOption {
     associatedtype SocketValue
 
     var name: Int32 { get }
+    func getLevel() -> Int32
     func makeValue(from socketValue: SocketValue) -> Value
     func makeSocketValue(from value: Value) -> SocketValue
+}
+
+extension SettableSocketOption {
+    public func getLevel() -> Int32 {
+        SOL_SOCKET
+    }
+}
+
+extension GettableSocketOption {
+    public func getLevel() -> Int32 {
+        SOL_SOCKET
+    }
+}
+
+extension SocketOption {
+    public func getLevel() -> Int32 {
+        SOL_SOCKET
+    }
 }
 
 public struct BoolSocketOption: SocketOption {
@@ -370,6 +414,10 @@ public struct MembershipRequestSocketOption: SettableSocketOption {
 
     public init(name: Int32) {
         self.name = name
+    }
+
+    public func getLevel() -> Int32 {
+        IPPROTO_IP
     }
 
     public func makeSocketValue(from value: MembershipRequest) -> MembershipRequest {
