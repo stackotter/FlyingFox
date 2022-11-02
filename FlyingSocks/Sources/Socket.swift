@@ -328,7 +328,14 @@ public protocol GettableSocketOption {
     func makeValue(from socketValue: SocketValue) -> Value
 }
 
-public protocol SocketOption: SettableSocketOption, GettableSocketOption {}
+public protocol SocketOption: SettableSocketOption, GettableSocketOption {
+    associatedtype Value
+    associatedtype SocketValue
+
+    var name: Int32 { get }
+    func makeValue(from socketValue: SocketValue) -> Value
+    func makeSocketValue(from value: Value) -> SocketValue
+}
 
 public struct BoolSocketOption: SocketOption {
     public var name: Int32
