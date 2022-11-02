@@ -79,6 +79,16 @@ public struct Socket: Sendable, Hashable {
     }
 
     public func setValue<O: SocketOption>(_ value: O.Value, for option: O) throws {
+        // This method exists so that users can still supply `.member` syntax for the `option`
+        // parameter for SocketOption members.
+        try setValueImpl(value, for: option)
+    }
+
+    public func setValue<O: SettableSocketOption>(_ value: O.Value, for option: O) throws {
+        try setValueImpl(value, for: option)
+    }
+
+    private func setValueImpl<O: SettableSocketOption>(_ value: O.Value, for option: O) throws {
         var value = option.makeSocketValue(from: value)
         let length = socklen_t(MemoryLayout<O.SocketValue>.size)
         guard Socket.setsockopt(file.rawValue, SOL_SOCKET, option.name, &value, length) >= 0 else {
@@ -87,6 +97,16 @@ public struct Socket: Sendable, Hashable {
     }
 
     public func getValue<O: SocketOption>(for option: O) throws -> O.Value {
+        // This method exists so that users can still supply `.member` syntax for the `option`
+        // parameter for SocketOption members.
+        try getValueImpl(for: option)
+    }
+
+    public func getValue<O: GettableSocketOption>(for option: O) throws -> O.Value {
+        try getValueImpl(for: option)
+    }
+
+    public func getValueImpl<O: GettableSocketOption>(for option: O) throws -> O.Value {
         let valuePtr = UnsafeMutablePointer<O.SocketValue>.allocate(capacity: 1)
         var length = socklen_t(MemoryLayout<O.SocketValue>.size)
         guard Socket.getsockopt(file.rawValue, SOL_SOCKET, option.name, valuePtr, &length) >= 0 else {
@@ -292,14 +312,23 @@ public extension Socket.Events {
     static let connection: Self = [.read, .write]
 }
 
-public protocol SocketOption {
+public protocol SettableSocketOption {
+    associatedtype Value
+    associatedtype SocketValue
+
+    var name: Int32 { get }
+    func makeSocketValue(from value: Value) -> SocketValue
+}
+
+public protocol GettableSocketOption {
     associatedtype Value
     associatedtype SocketValue
 
     var name: Int32 { get }
     func makeValue(from socketValue: SocketValue) -> Value
-    func makeSocketValue(from value: Value) -> SocketValue
 }
+
+public protocol SocketOption: SettableSocketOption, GettableSocketOption {}
 
 public struct BoolSocketOption: SocketOption {
     public var name: Int32
@@ -317,18 +346,42 @@ public struct BoolSocketOption: SocketOption {
     }
 }
 
-public struct Int32SocketOption: SocketOption {
+public struct MembershipRequest {
+    public var groupAddress: in_addr
+    public var localAddress: in_addr
+
+    public init(groupAddress: in_addr, localAddress: in_addr) {
+        self.groupAddress = groupAddress
+        self.localAddress = localAddress
+    }
+}
+
+public typealias Int32SocketOption = SimpleSocketOption<Int32>
+
+public struct MembershipRequestSocketOption: SettableSocketOption {
     public var name: Int32
 
     public init(name: Int32) {
         self.name = name
     }
 
-    public func makeValue(from socketValue: Int32) -> Int32 {
+    public func makeSocketValue(from value: MembershipRequest) -> MembershipRequest {
+        value
+    }
+}
+
+public struct SimpleSocketOption<T>: SocketOption {
+    public var name: Int32
+
+    public init(name: Int32) {
+        self.name = name
+    }
+
+    public func makeValue(from socketValue: T) -> T {
         socketValue
     }
 
-    public func makeSocketValue(from value: Int32) -> Int32 {
+    public func makeSocketValue(from value: T) -> T {
         value
     }
 }
@@ -344,6 +397,16 @@ public extension SocketOption where Self == BoolSocketOption {
         BoolSocketOption(name: SO_NOSIGPIPE)
     }
     #endif
+}
+
+public extension SettableSocketOption where Self == MembershipRequestSocketOption {
+    static var addMembership: Self {
+        MembershipRequestSocketOption(name: IP_ADD_MEMBERSHIP)
+    }
+
+    static var dropMembership: Self {
+        MembershipRequestSocketOption(name: IP_DROP_MEMBERSHIP)
+    }
 }
 
 public extension SocketOption where Self == Int32SocketOption {
