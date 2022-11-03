@@ -411,7 +411,7 @@ public struct TimeValue {
     public var seconds: Int
     public var microSeconds: Int
 
-    public init(seconds: Int, microSeconds: Int) {
+    public init(seconds: Int = 0, microSeconds: Int = 0) {
         self.seconds = seconds
         self.microSeconds = microSeconds
     }
