@@ -407,7 +407,18 @@ public struct MembershipRequest {
     }
 }
 
+public struct TimeValue {
+    public var seconds: Int
+    public var microSeconds: Int
+
+    public init(seconds: Int, microSeconds: Int) {
+        self.seconds = seconds
+        self.microSeconds = microSeconds
+    }
+}
+
 public typealias Int32SocketOption = SimpleSocketOption<Int32>
+public typealias TimeSocketOption = SimpleSocketOption<TimeValue>
 
 public struct MembershipRequestSocketOption: SettableSocketOption {
     public var name: Int32
@@ -471,5 +482,15 @@ public extension SocketOption where Self == Int32SocketOption {
 
     static var receiveBufferSize: Self {
         Int32SocketOption(name: SO_RCVBUF)
+    }
+}
+
+public extension SocketOption where Self == TimeSocketOption {
+    static var receiveTimeout: Self {
+        TimeSocketOption(name: SO_RCVTIMEO)
+    }
+
+    static var sendTimeout: Self {
+        TimeSocketOption(name: SO_SNDTIMEO)
     }
 }
